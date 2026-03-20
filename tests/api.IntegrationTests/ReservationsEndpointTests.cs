@@ -6,6 +6,9 @@ using Models;
 
 namespace api.IntegrationTests;
 
+/// <summary>
+/// Tests run against in-memory sqlite. Room numbers (existing) should differ along tests to avoid tests conflicts. 
+/// </summary>
 public class ReservationsEndpointTests : IClassFixture<TestWebApplicationFactory>
 {
     private readonly HttpClient _client;
@@ -233,5 +236,28 @@ public class ReservationsEndpointTests : IClassFixture<TestWebApplicationFactory
 
         var secondResponse = await _client.PostAsJsonAsync("/api/reservations", nonOverlapping);
         Assert.Equal(HttpStatusCode.Created, secondResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Post_concurrent_double_booking_same_dates_returns_409()
+    {
+        var booking = new ReservationRequest
+        {
+            RoomNumber = "103",
+            GuestEmail = "guest@mjail.com",
+            Start = DateTime.Today.AddDays(10),
+            End = DateTime.Today.AddDays(13)
+        };
+
+        var task1 = _client.PostAsJsonAsync("/api/reservations", booking);
+        var task2 = _client.PostAsJsonAsync("/api/reservations", booking);
+        var task3 = _client.PostAsJsonAsync("/api/reservations", booking);
+        var task4 = _client.PostAsJsonAsync("/api/reservations", booking);
+        
+        var responses = await Task.WhenAll(task1, task2, task3, task4);
+
+        var statuses = responses.Select(r => r.StatusCode).ToList();
+        Assert.Equal(1, statuses.Count(s => s == HttpStatusCode.Created));
+        Assert.Equal(3, statuses.Count(s => s == HttpStatusCode.Conflict));
     }
 }

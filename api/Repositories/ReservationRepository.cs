@@ -3,6 +3,7 @@ using Dapper;
 using Models;
 using Contracts;
 using Models.Errors;
+using Extensions;
 
 namespace Repositories
 {
@@ -76,8 +77,9 @@ namespace Repositories
         public async Task<Reservation> CreateReservation(ReservationRequest request)
         {
             ArgumentNullException.ThrowIfNull(request);
+            
 
-            using var transaction = _db.BeginTransaction(IsolationLevel.Serializable);
+            using var transaction = _db.BeginSerializableTransaction();
 
             try
             {

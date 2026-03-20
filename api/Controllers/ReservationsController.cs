@@ -37,7 +37,7 @@ namespace Controllers
         [HttpGet, Produces("application/json"), Route("{reservationId}")]
         [ProducesResponseType(typeof(Reservation), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
-        public async Task<ActionResult<Reservation>> GetRoom(Guid reservationId)
+        public async Task<ActionResult<Reservation>> GetReservation(Guid reservationId)
         {
             var reservation = await _repo.GetReservation(reservationId);
             

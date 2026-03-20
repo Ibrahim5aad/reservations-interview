@@ -34,7 +34,7 @@ namespace Models
             var success = int.TryParse(roomNumber, out int roomNumberInt);
             if (!success)
             {
-                throw new InvalidRoomNumber(roomNumber);
+                throw new ValidationException(nameof(Room), roomNumber, $"The value {roomNumber} is not a valid room number");
             }
 
             return roomNumberInt;

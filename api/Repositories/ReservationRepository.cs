@@ -34,14 +34,16 @@ namespace Repositories
         /// <exception cref="NotFoundException"></exception>
         public async Task<Reservation> GetReservation(Guid reservationId)
         {
+            var reservationIdStr = reservationId.ToString();
+
             var reservation = await _db.QueryFirstOrDefaultAsync<ReservationDb>(
                 "SELECT * FROM Reservations WHERE Id = @reservationIdStr;",
-                new { reservationIdStr = reservationId.ToString() }
+                new { reservationIdStr = reservationIdStr }
             );
 
             if (reservation == null)
             {
-                throw new NotFoundException($"Room {reservationId} not found");
+                throw new NotFoundException(nameof(Reservation), reservationIdStr);
             }
 
             return reservation.ToDomain();

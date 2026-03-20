@@ -31,7 +31,7 @@ namespace Repositories
 
             if (room == null)
             {
-                throw new NotFoundException($"Room {roomNumber} not found");
+                throw new NotFoundException(nameof(Room), roomNumber);
             }
 
             return room.ToDomain();

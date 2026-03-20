@@ -2,12 +2,15 @@ using System.Data;
 using Db;
 using Microsoft.Data.Sqlite;
 using Repositories;
+using Extensions;
+using Middlewares;
 
 var builder = WebApplication.CreateBuilder(args);
 
 
 {
     var Services = builder.Services;
+    Services.ConfigureLogging(builder.Configuration, builder.Environment.EnvironmentName);
     var connectionString =
         builder.Configuration.GetConnectionString("ReservationsDb")
         ?? "Data Source=reservations.db;Cache=Shared";
@@ -27,7 +30,7 @@ var builder = WebApplication.CreateBuilder(args);
 }
 
 var app = builder.Build();
-
+var logger = app.Services.GetRequiredService<ILogger<Program>>();
 
 {
     try
@@ -36,11 +39,12 @@ var app = builder.Build();
     }
     catch (Exception ex)
     {
-        Console.WriteLine("Failed to setup the database, aborting");
-        Console.WriteLine(ex.ToString());
+        logger.LogCritical(ex, "Failed to setup the database, aborting");
         Environment.Exit(1);
         return;
     }
+
+    app.UseMiddleware<ExceptionHandlingMiddleware>();
 
     app.UsePathBase("/api")
         .UseMvc()
@@ -50,3 +54,5 @@ var app = builder.Build();
 }
 
 app.Run();
+
+public partial class Program { }

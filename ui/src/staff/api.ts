@@ -18,6 +18,8 @@ const StaffReservationSchema = z.object({
   guestEmail: z.string(),
   start: z.string(),
   end: z.string(),
+  checkedIn: z.boolean(),
+  checkedOut: z.boolean(),
 });
 
 export type StaffReservation = z.infer<typeof StaffReservationSchema>;
@@ -29,6 +31,15 @@ export interface ReservationFilters {
   to?: string;
   roomNumber?: string;
   guestEmail?: string;
+}
+
+export async function checkInReservation(token: string, reservationId: string, guestEmail: string) {
+  return api
+    .post(`/api/reservations/${reservationId}/check-in`, {
+      json: { guestEmail },
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    .json();
 }
 
 export function useGetStaffReservations(token: string | null, filters: ReservationFilters) {

@@ -168,4 +168,66 @@ public class StaffEndpointTests : IClassFixture<TestWebApplicationFactory>
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
+
+    [Fact]
+    public async Task CheckIn_today_reservation_returns_200_and_marks_checked_in()
+    {
+        var client = await GetAuthenticatedClient();
+
+        var booking = new ReservationRequest
+        {
+            RoomNumber = "104",
+            GuestEmail = "checkin-test@mjail.com",
+            Start = DateTime.Today,
+            End = DateTime.Today.AddDays(3)
+        };
+        var createResponse = await client.PostAsJsonAsync("/api/reservations", booking);
+        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+        var created = await createResponse.Content.ReadFromJsonAsync<Reservation>(_jsonOptions);
+        Assert.NotNull(created);
+
+        // Check in
+        var checkInResponse = await client.PostAsJsonAsync(
+            $"/api/reservations/{created.Id}/check-in",
+            new { guestEmail = "checkin-test@mjail.com" });
+
+        Assert.Equal(HttpStatusCode.OK, checkInResponse.StatusCode);
+        var checkedIn = await checkInResponse.Content.ReadFromJsonAsync<Reservation>(_jsonOptions);
+        Assert.NotNull(checkedIn);
+        Assert.True(checkedIn.CheckedIn);
+
+        // Verify room is marked as occupied
+        var roomResponse = await client.GetAsync($"/api/rooms/{created.RoomNumber}");
+        var room = await roomResponse.Content.ReadFromJsonAsync<Room>(_jsonOptions);
+        Assert.NotNull(room);
+        Assert.Equal((int)State.Occupied, (int)room.State);
+    }
+
+    [Fact]
+    public async Task CheckIn_with_wrong_email_returns_400()
+    {
+        var client = await GetAuthenticatedClient();
+
+        var booking = new ReservationRequest
+        {
+            RoomNumber = "105",
+            GuestEmail = "correct@mjail.com",
+            Start = DateTime.Today,
+            End = DateTime.Today.AddDays(2)
+        };
+        var createResponse = await client.PostAsJsonAsync("/api/reservations", booking);
+        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+        var created = await createResponse.Content.ReadFromJsonAsync<Reservation>(_jsonOptions);
+        Assert.NotNull(created);
+
+        // Check in with wrong email
+        var checkInResponse = await client.PostAsJsonAsync(
+            $"/api/reservations/{created.Id}/check-in",
+            new { guestEmail = "wrong@mjail.com" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, checkInResponse.StatusCode);
+        var error = await checkInResponse.Content.ReadFromJsonAsync<ErrorResponse>(_jsonOptions);
+        Assert.NotNull(error);
+        Assert.Contains("email", error.Detail, StringComparison.OrdinalIgnoreCase);
+    }
 }

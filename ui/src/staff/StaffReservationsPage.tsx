@@ -1,9 +1,12 @@
 import { useState } from "react";
-import { Box, Card, Flex, Heading, Section, Select, Table, Text, TextField } from "@radix-ui/themes";
+import { Badge, Box, Button, Card, Flex, Heading, Section, Select, Table, Text, TextField } from "@radix-ui/themes";
 import { useNavigate } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../utils/auth";
-import { ReservationFilters, useGetStaffReservations } from "./api";
+import { checkInReservation, ReservationFilters, StaffReservation, useGetStaffReservations } from "./api";
 import { useGetRooms } from "../reservations/api";
+import { parseApiError } from "../reservations/api";
+import { useShowErrorToast, useShowSuccessToast } from "../utils/toasts";
 import { LoadingCard } from "../components/LoadingCard";
 
 function todayStr() {
@@ -20,6 +23,29 @@ export function StaffReservationsPage() {
 
   const { data: reservations, isLoading } = useGetStaffReservations(token, filters);
   const { data: rooms } = useGetRooms();
+  const queryClient = useQueryClient();
+  const showError = useShowErrorToast();
+  const showSuccess = useShowSuccessToast("Guest checked in successfully!");
+  const [checkingIn, setCheckingIn] = useState<string | null>(null);
+
+  function coversToday(start: string, end: string) {
+    const today = new Date().toDateString();
+    return new Date(start) <= new Date(today) && new Date(end) > new Date(today);
+  }
+
+  async function handleCheckIn(r: StaffReservation) {
+    setCheckingIn(r.id);
+    try {
+      await checkInReservation(token!, r.id, r.guestEmail);
+      showSuccess();
+      queryClient.invalidateQueries({ queryKey: ["staff-reservations"] });
+    } catch (error) {
+      const errors = await parseApiError(error);
+      showError(errors);
+    } finally {
+      setCheckingIn(null);
+    }
+  }
 
   if (!isAuthenticated) {
     navigate({ to: "/" });
@@ -100,6 +126,8 @@ export function StaffReservationsPage() {
               <Table.ColumnHeaderCell>Guest Email</Table.ColumnHeaderCell>
               <Table.ColumnHeaderCell>Check-in</Table.ColumnHeaderCell>
               <Table.ColumnHeaderCell>Check-out</Table.ColumnHeaderCell>
+              <Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
+              <Table.ColumnHeaderCell></Table.ColumnHeaderCell>
             </Table.Row>
           </Table.Header>
           <Table.Body>
@@ -109,6 +137,25 @@ export function StaffReservationsPage() {
                 <Table.Cell>{r.guestEmail}</Table.Cell>
                 <Table.Cell>{new Date(r.start).toLocaleDateString()}</Table.Cell>
                 <Table.Cell>{new Date(r.end).toLocaleDateString()}</Table.Cell>
+                <Table.Cell>
+                  {r.checkedOut
+                    ? <Badge color="blue">Checked Out</Badge>
+                    : r.checkedIn
+                      ? <Badge color="green">Checked In</Badge>
+                      : <Badge color="gray">Pending</Badge>}
+                </Table.Cell>
+                <Table.Cell>
+                  {!r.checkedIn && coversToday(r.start, r.end) && (
+                    <Button
+                      size="1"
+                      color="mint"
+                      disabled={checkingIn === r.id}
+                      onClick={() => handleCheckIn(r)}
+                    >
+                      {checkingIn === r.id ? "..." : "Check In"}
+                    </Button>
+                  )}
+                </Table.Cell>
               </Table.Row>
             ))}
           </Table.Body>

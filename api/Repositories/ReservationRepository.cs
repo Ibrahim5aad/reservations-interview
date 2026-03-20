@@ -140,6 +140,39 @@ namespace Repositories
             }
         }
 
+        public async Task<Reservation> CheckIn(Guid reservationId, string guestEmail)
+        {
+            var reservation = await GetReservation(reservationId);
+
+            if (!string.Equals(reservation.GuestEmail, guestEmail, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ValidationException(nameof(Reservation), reservationId.ToString(), "Guest email does not match the reservation");
+            }
+
+            if (reservation.CheckedIn)
+            {
+                throw new ConflictException(nameof(Reservation), reservationId.ToString(), "Reservation is already checked in");
+            }
+
+            if (reservation.Start > DateTime.Today || reservation.End <= DateTime.Today)
+            {
+                throw new ValidationException(nameof(Reservation), reservationId.ToString(), "Check-in is only allowed on the reservation start date");
+            }
+
+            await _db.ExecuteAsync(
+                "UPDATE Reservations SET CheckedIn = 1 WHERE Id = @reservationId",
+                new { reservationId }
+            );
+
+            await _db.ExecuteAsync(
+                "UPDATE Rooms SET State = @State WHERE Number = @RoomNumber",
+                new { State = (int)State.Occupied, reservation.RoomNumber }
+            );
+
+            reservation.CheckedIn = true;
+            return reservation;
+        }
+
         public async Task DeleteReservation(Guid reservationId)
         {
             var deleted = await _db.ExecuteAsync(

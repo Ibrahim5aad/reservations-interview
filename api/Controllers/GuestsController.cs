@@ -4,8 +4,9 @@ using Repositories;
 
 namespace Controllers
 {
+    [ApiController]
     [Tags("Guests"), Route("guests")]
-    public class GuestsController : Controller
+    public class GuestsController : ControllerBase
     {
         private GuestRepository _repo;
 
@@ -15,11 +16,12 @@ namespace Controllers
         }
 
         [HttpGet, Produces("application/json"), Route("")]
+        [ProducesResponseType(typeof(IEnumerable<Guest>), StatusCodes.Status200OK)]
         public async Task<ActionResult<Guest>> GetGuests()
         {
             var guests = await _repo.GetGuests();
 
-            return Json(guests);
+            return Ok(guests);
         }
     }
 }

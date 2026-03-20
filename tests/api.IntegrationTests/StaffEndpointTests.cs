@@ -20,6 +20,8 @@ public class StaffEndpointTests : IClassFixture<TestWebApplicationFactory>
         _client = factory.CreateClient();
     }
 
+    #region Helpers
+
     private async Task<string> GetStaffToken()
     {
         var request = new HttpRequestMessage(HttpMethod.Post, "/api/staff/login");
@@ -38,6 +40,18 @@ public class StaffEndpointTests : IClassFixture<TestWebApplicationFactory>
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
         return _client;
     }
+
+    private static MultipartFormDataContent CreateCsvFile(string content, string fileName = "rooms.csv")
+    {
+        var formData = new MultipartFormDataContent();
+        var fileContent = new StringContent(content);
+        formData.Add(fileContent, "file", fileName);
+        return formData;
+    }
+
+    #endregion
+
+    #region Auth
 
     [Fact]
     public async Task Login_with_valid_code_returns_token()
@@ -77,6 +91,21 @@ public class StaffEndpointTests : IClassFixture<TestWebApplicationFactory>
     }
 
     [Fact]
+    public async Task Delete_reservation_without_token_returns_401()
+    {
+        var client = _client;
+        client.DefaultRequestHeaders.Authorization = null;
+
+        var response = await client.DeleteAsync($"/api/reservations/{Guid.NewGuid()}");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    #endregion
+
+    #region Reservations
+
+    [Fact]
     public async Task Get_reservations_with_token_returns_200()
     {
         var client = await GetAuthenticatedClient();
@@ -91,7 +120,6 @@ public class StaffEndpointTests : IClassFixture<TestWebApplicationFactory>
     {
         var client = await GetAuthenticatedClient();
 
-        // Create a reservation for the future
         var booking = new ReservationRequest
         {
             RoomNumber = "104",
@@ -117,7 +145,6 @@ public class StaffEndpointTests : IClassFixture<TestWebApplicationFactory>
     {
         var client = await GetAuthenticatedClient();
 
-        // Create a reservation
         var booking = new ReservationRequest
         {
             RoomNumber = "105",
@@ -140,7 +167,6 @@ public class StaffEndpointTests : IClassFixture<TestWebApplicationFactory>
     {
         var client = await GetAuthenticatedClient();
 
-        // Create a reservation
         var booking = new ReservationRequest
         {
             RoomNumber = "201",
@@ -158,16 +184,9 @@ public class StaffEndpointTests : IClassFixture<TestWebApplicationFactory>
         Assert.All(reservations, r => Assert.Equal("email-filter@mjail.com", r.GuestEmail));
     }
 
-    [Fact]
-    public async Task Delete_reservation_without_token_returns_401()
-    {
-        var client = _client;
-        client.DefaultRequestHeaders.Authorization = null;
+    #endregion
 
-        var response = await client.DeleteAsync($"/api/reservations/{Guid.NewGuid()}");
-
-        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-    }
+    #region Check-in
 
     [Fact]
     public async Task CheckIn_today_reservation_returns_200_and_marks_checked_in()
@@ -230,4 +249,41 @@ public class StaffEndpointTests : IClassFixture<TestWebApplicationFactory>
         Assert.NotNull(error);
         Assert.Contains("email", error.Detail, StringComparison.OrdinalIgnoreCase);
     }
+
+    #endregion
+
+    #region Import
+
+    [Fact]
+    public async Task Import_valid_csv_returns_200_with_results()
+    {
+        var client = await GetAuthenticatedClient();
+        var csv = "number\n301\n302\n303";
+
+        var response = await client.PostAsync("/api/rooms/import", CreateCsvFile(csv));
+        var result = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(3, result.GetProperty("imported").GetInt32());
+        Assert.Equal(0, result.GetProperty("failed").GetInt32());
+    }
+
+    [Fact]
+    public async Task Import_csv_with_invalid_rooms_returns_errors()
+    {
+        var client = await GetAuthenticatedClient();
+        var csv = "number\n401\n000\nabc\n402";
+
+        var response = await client.PostAsync("/api/rooms/import", CreateCsvFile(csv));
+        var result = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(2, result.GetProperty("imported").GetInt32());
+        Assert.Equal(2, result.GetProperty("failed").GetInt32());
+
+        var errors = result.GetProperty("errors");
+        Assert.Equal(2, errors.GetArrayLength());
+    }
+
+    #endregion
 }

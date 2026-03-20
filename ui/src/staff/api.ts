@@ -33,10 +33,47 @@ export interface ReservationFilters {
   guestEmail?: string;
 }
 
-export async function checkInReservation(token: string, reservationId: string, guestEmail: string) {
+
+const RoomStateLabels: Record<number, string> = {
+  0: "Ready",
+  1: "Occupied",
+  2: "Dirty",
+};
+
+export { RoomStateLabels };
+
+const ImportErrorSchema = z.object({
+  line: z.number(),
+  roomNumber: z.string(),
+  message: z.string(),
+});
+
+const ImportResultSchema = z.object({
+  totalRows: z.number(),
+  imported: z.number(),
+  failed: z.number(),
+  errors: ImportErrorSchema.array(),
+});
+
+export type ImportResult = z.infer<typeof ImportResultSchema>;
+export type ImportError = z.infer<typeof ImportErrorSchema>;
+
+export async function importRooms(token: string, file: File): Promise<ImportResult> {
+  const formData = new FormData();
+  formData.append("file", file);
+
   return api
-    .post(`/api/reservations/${reservationId}/check-in`, {
-      json: { guestEmail },
+    .post("/api/rooms/import", {
+      body: formData,
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    .json()
+    .then(ImportResultSchema.parseAsync);
+}
+
+export async function deleteRoom(token: string, roomNumber: string) {
+  return api
+    .delete(`/api/rooms/${roomNumber}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
     .json();
@@ -63,4 +100,13 @@ export function useGetStaffReservations(token: string | null, filters: Reservati
         .json()
         .then(StaffReservationListSchema.parseAsync),
   });
+}
+
+export async function checkInReservation(token: string, reservationId: string, guestEmail: string) {
+  return api
+    .post(`/api/reservations/${reservationId}/check-in`, {
+      json: { guestEmail },
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    .json();
 }

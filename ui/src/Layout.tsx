@@ -29,9 +29,17 @@ export const Layout = () => {
           </Text>
         </Link>
         {isAuthenticated && (
-          <Button size="1" color="gray" variant="outline" onClick={handleLogout}>
-            Logout
-          </Button>
+          <Flex align="center" gap="3">
+            <Link to="/staff/reservations" style={HEADING}>
+              <Text size="3" weight="medium">Reservations</Text>
+            </Link>
+            <Link to="/staff/rooms" style={HEADING}>
+              <Text size="3" weight="medium">Rooms</Text>
+            </Link>
+            <Button size="1" color="gray" variant="outline" onClick={handleLogout}>
+              Logout
+            </Button>
+          </Flex>
         )}
       </Flex>
       <Outlet />

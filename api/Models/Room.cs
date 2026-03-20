@@ -8,6 +8,8 @@ namespace Models
     /// </summary>
     public class Room
     {
+        private static readonly Regex RoomNumberPattern = new(@"^[1-9]\d{2}$");
+
         /// <summary>
         /// PKID For Rooms. Format is "###" where first digit is floor (1-9)
         /// and last two digits are the door number (01-99).
@@ -19,14 +21,17 @@ namespace Models
         /// </summary>
         public State State { get; set; } = State.Ready;
 
-        private static readonly Regex RoomNumberPattern = new(@"^[1-9]\d{2}$");
-
         /// <summary>
         /// Validates the room number format. Must be 3 digits, first digit 1-9, last two not "00".
         /// </summary>
+        public static bool IsValidRoomNumber(string roomNumber)
+        {
+            return RoomNumberPattern.IsMatch(roomNumber) && roomNumber[1..] != "00";
+        }
+
         public static void ValidateRoomNumber(string roomNumber)
         {
-            if (!RoomNumberPattern.IsMatch(roomNumber) || roomNumber[1..] == "00")
+            if (!IsValidRoomNumber(roomNumber))
             {
                 throw new ValidationException(nameof(Room), roomNumber, $"The value {roomNumber} is not a valid room number");
             }

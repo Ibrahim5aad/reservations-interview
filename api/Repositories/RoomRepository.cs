@@ -1,5 +1,6 @@
 using System.Data;
 using Dapper;
+using Extensions;
 using Models;
 using Models.Errors;
 
@@ -57,6 +58,56 @@ namespace Repositories
             );
 
             return createdRoom;
+        }
+
+        public async Task<int> CreateRoomsBatch(List<(int Line, Room Room)> rooms, List<Contracts.ImportError> errors)
+        {
+            if (rooms.Count == 0) return 0;
+
+            using var transaction = _db.BeginSerializableTransaction();
+            var imported = 0;
+
+            try
+            {
+                var existingNumbers = (await _db.QueryAsync<string>(
+                    "SELECT Number FROM Rooms WHERE Number IN @Numbers",
+                    new { Numbers = rooms.Select(r => r.Room.Number).ToList() },
+                    transaction
+                )).ToHashSet();
+
+                foreach (var (line, room) in rooms)
+                {
+                    if (existingNumbers.Contains(room.Number))
+                    {
+                        errors.Add(new Contracts.ImportError(line, room.Number, $"Room {room.Number} already exists"));
+                        continue;
+                    }
+
+                    await _db.ExecuteAsync(
+                        "INSERT INTO Rooms(Number, State) VALUES(@Number, @State)",
+                        room,
+                        transaction
+                    );
+                    imported++;
+                }
+
+                transaction.Commit();
+                return imported;
+            }
+            catch
+            {
+                transaction.Rollback();
+                throw;
+            }
+        }
+
+        public async Task<bool> RoomExists(string roomNumber)
+        {
+            var count = await _db.ExecuteScalarAsync<int>(
+                "SELECT COUNT(1) FROM Rooms WHERE Number = @roomNumber",
+                new { roomNumber }
+            );
+            return count > 0;
         }
 
         public async Task<bool> DeleteRoom(string roomNumber)

@@ -57,7 +57,7 @@ export function StaffReservationsPage() {
   }
 
   return (
-    <Section size="2" px="2">
+    <Section size="1" px="2">
       <Heading size="8" as="h1" color="mint" mb="6">
         Reservations
       </Heading>

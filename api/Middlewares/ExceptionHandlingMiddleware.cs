@@ -44,7 +44,7 @@ namespace Middlewares
                 await SetValidationResponse(e, httpContext);
             }
             catch(Exception e)
-                {
+            {
                 await SetResponse(e, httpContext, HttpStatusCode.InternalServerError);
             }
         }

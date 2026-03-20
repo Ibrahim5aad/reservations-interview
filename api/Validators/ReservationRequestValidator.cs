@@ -1,13 +1,11 @@
-using System.Text.RegularExpressions;
 using FluentValidation;
 using Contracts;
+using Models;
 
 namespace Validators
 {
     public class ReservationRequestValidator : AbstractValidator<ReservationRequest>
     {
-        private static readonly Regex RoomNumberPattern = new(@"^[1-9]\d{2}$");
-
         public ReservationRequestValidator()
         {
             RuleFor(x => x.GuestEmail)
@@ -17,7 +15,7 @@ namespace Validators
 
             RuleFor(x => x.RoomNumber)
                 .NotEmpty().WithMessage("Room number is required")
-                .Must(BeValidRoomNumber).WithMessage("Room number must be in format '###' (e.g. 101, 202)");
+                .Must(Room.IsValidRoomNumber).WithMessage("Room number must be in format '###' (e.g. 101, 202)");
 
             RuleFor(x => x.Start)
                 .NotEmpty().WithMessage("Start date is required")
@@ -31,11 +29,6 @@ namespace Validators
             RuleFor(x => x)
                 .Must(HaveMinimumDuration).WithMessage("Minimum booking duration is 1 day")
                 .Must(HaveMaximumDuration).WithMessage("Maximum booking duration is 30 days");
-        }
-
-        private static bool BeValidRoomNumber(string roomNumber)
-        {
-            return RoomNumberPattern.IsMatch(roomNumber) && roomNumber[1..] != "00";
         }
 
         private static bool HaveMinimumDuration(ReservationRequest request)

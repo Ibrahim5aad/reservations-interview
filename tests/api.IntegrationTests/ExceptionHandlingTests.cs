@@ -62,16 +62,21 @@ public class ExceptionHandlingTests : IClassFixture<TestWebApplicationFactory>
         var doc = JsonDocument.Parse(content);
         var root = doc.RootElement;
 
-        Assert.True(root.TryGetProperty("ResourceType", out _));
-        Assert.True(root.TryGetProperty("ResourceId", out _));
-        Assert.True(root.TryGetProperty("Detail", out _));
-        Assert.True(root.TryGetProperty("Title", out _));
+        Assert.True(root.TryGetProperty("resourceType", out _));
+        Assert.True(root.TryGetProperty("resourceId", out _));
+        Assert.True(root.TryGetProperty("detail", out _));
+        Assert.True(root.TryGetProperty("title", out _));
     }
+
+    private static readonly JsonSerializerOptions _jsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
 
     private static async Task<ErrorResponse> DeserializeResponse(HttpResponseMessage response)
     {
         var content = await response.Content.ReadAsStringAsync();
-        return JsonSerializer.Deserialize<ErrorResponse>(content)
+        return JsonSerializer.Deserialize<ErrorResponse>(content, _jsonOptions)
             ?? throw new Exception("Failed to deserialize error response");
     }
 

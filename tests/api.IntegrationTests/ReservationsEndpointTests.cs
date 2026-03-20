@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Contracts;
 using Models;
 
@@ -8,6 +9,10 @@ namespace api.IntegrationTests;
 public class ReservationsEndpointTests : IClassFixture<TestWebApplicationFactory>
 {
     private readonly HttpClient _client;
+    private static readonly JsonSerializerOptions _jsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
 
     public ReservationsEndpointTests(TestWebApplicationFactory factory)
     {
@@ -33,7 +38,7 @@ public class ReservationsEndpointTests : IClassFixture<TestWebApplicationFactory
             $"Expected 201 but got {(int)response.StatusCode}: {await response.Content.ReadAsStringAsync()}"
         );
 
-        var reservation = await response.Content.ReadFromJsonAsync<Reservation>();
+        var reservation = await response.Content.ReadFromJsonAsync<Reservation>(_jsonOptions);
         Assert.NotNull(reservation);
         Assert.NotEqual(Guid.Empty, reservation.Id);
         Assert.Equal("101", reservation.RoomNumber);
@@ -47,7 +52,7 @@ public class ReservationsEndpointTests : IClassFixture<TestWebApplicationFactory
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var reservations = await response.Content.ReadFromJsonAsync<List<Reservation>>();
+        var reservations = await response.Content.ReadFromJsonAsync<List<Reservation>>(_jsonOptions);
         Assert.NotNull(reservations);
     }
 
@@ -59,7 +64,7 @@ public class ReservationsEndpointTests : IClassFixture<TestWebApplicationFactory
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
 
-        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>(_jsonOptions);
         Assert.NotNull(error);
         Assert.Equal("NotFound", error.Title);
         Assert.Equal("Reservation", error.ResourceType);
@@ -78,7 +83,7 @@ public class ReservationsEndpointTests : IClassFixture<TestWebApplicationFactory
         };
 
         var response = await _client.PostAsJsonAsync("/api/reservations", booking);
-        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>(_jsonOptions);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.NotNull(error);
@@ -99,7 +104,7 @@ public class ReservationsEndpointTests : IClassFixture<TestWebApplicationFactory
         };
 
         var response = await _client.PostAsJsonAsync("/api/reservations", invalidBooking);
-        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>(_jsonOptions);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.NotNull(error);
@@ -122,7 +127,7 @@ public class ReservationsEndpointTests : IClassFixture<TestWebApplicationFactory
         };
 
         var response = await _client.PostAsJsonAsync("/api/reservations", booking);
-        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>(_jsonOptions);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.NotNull(error?.Errors);
@@ -142,11 +147,91 @@ public class ReservationsEndpointTests : IClassFixture<TestWebApplicationFactory
         };
 
         var response = await _client.PostAsJsonAsync("/api/reservations", booking);
-        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>(_jsonOptions);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.NotNull(error?.Errors);
         Assert.True(error.Errors.ContainsKey("GuestEmail"));
         Assert.False(error.Errors.ContainsKey("RoomNumber"));
+    }
+
+    [Fact]
+    public async Task Post_double_booking_same_dates_returns_409()
+    {
+        var booking = new ReservationRequest
+        {
+            RoomNumber = "201",
+            GuestEmail = "guest@mjail.com",
+            Start = DateTime.Today.AddDays(10),
+            End = DateTime.Today.AddDays(13)
+        };
+
+        var first = await _client.PostAsJsonAsync("/api/reservations", booking);
+        Assert.Equal(HttpStatusCode.Created, first.StatusCode);
+
+        var second = await _client.PostAsJsonAsync("/api/reservations", booking);
+        var error = await second.Content.ReadFromJsonAsync<ErrorResponse>(_jsonOptions);
+
+        Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
+        Assert.NotNull(error);
+        Assert.Equal("Conflict", error.Title);
+        Assert.Equal("Reservation", error.ResourceType);
+        Assert.Contains("201", error.Detail);
+    }
+
+    [Fact]
+    public async Task Post_overlapping_booking_returns_409()
+    {
+        var first = new ReservationRequest
+        {
+            RoomNumber = "202",
+            GuestEmail = "guest@mjail.com",
+            Start = DateTime.Today.AddDays(10),
+            End = DateTime.Today.AddDays(15)
+        };
+
+        var firstResponse = await _client.PostAsJsonAsync("/api/reservations", first);
+        Assert.Equal(HttpStatusCode.Created, firstResponse.StatusCode);
+
+        var overlapping = new ReservationRequest
+        {
+            RoomNumber = "202",
+            GuestEmail = "other@mjail.com",
+            Start = DateTime.Today.AddDays(13),
+            End = DateTime.Today.AddDays(18)
+        };
+
+        var secondResponse = await _client.PostAsJsonAsync("/api/reservations", overlapping);
+        var error = await secondResponse.Content.ReadFromJsonAsync<ErrorResponse>(_jsonOptions);
+
+        Assert.Equal(HttpStatusCode.Conflict, secondResponse.StatusCode);
+        Assert.NotNull(error);
+        Assert.Equal("Conflict", error.Title);
+    }
+
+    [Fact]
+    public async Task Post_non_overlapping_booking_same_room_succeeds()
+    {
+        var first = new ReservationRequest
+        {
+            RoomNumber = "203",
+            GuestEmail = "guest@mjail.com",
+            Start = DateTime.Today.AddDays(10),
+            End = DateTime.Today.AddDays(13)
+        };
+
+        var firstResponse = await _client.PostAsJsonAsync("/api/reservations", first);
+        Assert.Equal(HttpStatusCode.Created, firstResponse.StatusCode);
+
+        var nonOverlapping = new ReservationRequest
+        {
+            RoomNumber = "203",
+            GuestEmail = "other@mjail.com",
+            Start = DateTime.Today.AddDays(13),
+            End = DateTime.Today.AddDays(16)
+        };
+
+        var secondResponse = await _client.PostAsJsonAsync("/api/reservations", nonOverlapping);
+        Assert.Equal(HttpStatusCode.Created, secondResponse.StatusCode);
     }
 }

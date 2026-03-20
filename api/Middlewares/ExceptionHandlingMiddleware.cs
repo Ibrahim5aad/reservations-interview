@@ -31,6 +31,10 @@ namespace Middlewares
             {
                 await SetResponse(e, httpContext, HttpStatusCode.NotFound);
             }
+            catch (ConflictException e)
+            {
+                await SetResponse(e, httpContext, HttpStatusCode.Conflict);
+            }
             catch (ValidationException e)
             {
                 await SetResponse(e, httpContext, HttpStatusCode.BadRequest);

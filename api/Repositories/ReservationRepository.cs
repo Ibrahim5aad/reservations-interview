@@ -48,36 +48,67 @@ namespace Repositories
 
         public async Task<Reservation> CreateReservation(ReservationRequest request)
         {
-
             ArgumentNullException.ThrowIfNull(request);
 
-            var room = await _db.QueryFirstOrDefaultAsync<Room>(
-                "SELECT * FROM Rooms WHERE Number = @RoomNumber;",
-                new { request.RoomNumber }
-            ) ?? throw new NotFoundException(nameof(Room), request.RoomNumber);
+            using var transaction = _db.BeginTransaction(IsolationLevel.Serializable);
 
-            await _db.ExecuteAsync(
-                "INSERT OR IGNORE INTO Guests(Email, Name) VALUES(@GuestEmail, @GuestEmail)",
-                new { request.GuestEmail }
-            );
-
-            var reservation = new Reservation
+            try
             {
-                Id = Guid.NewGuid(),
-                RoomNumber = request.RoomNumber,
-                GuestEmail = request.GuestEmail,
-                Start = request.Start,
-                End = request.End
-            };
+                var room = await _db.QueryFirstOrDefaultAsync<Room>(
+                    "SELECT * FROM Rooms WHERE Number = @RoomNumber;",
+                    new { request.RoomNumber },
+                    transaction
+                ) ?? throw new NotFoundException(nameof(Room), request.RoomNumber);
 
-            var created = await _db.QuerySingleAsync<Reservation>(
-                @"INSERT INTO Reservations(Id, GuestEmail, RoomNumber, Start, End)
-                  VALUES(@Id, @GuestEmail, @RoomNumber, @Start, @End)
-                  RETURNING *",
-                reservation
-            );
+                var conflict = await _db.QueryFirstOrDefaultAsync<Reservation>(
+                    @"SELECT * FROM Reservations
+                      WHERE RoomNumber = @RoomNumber
+                      AND Start < @End
+                      AND [End] > @Start",
+                    new { request.RoomNumber, request.Start, request.End },
+                    transaction
+                );
 
-            return created;
+                if (conflict != null)
+                {
+                    throw new ConflictException(
+                        nameof(Reservation),
+                        request.RoomNumber,
+                        $"Room {request.RoomNumber} is already booked from {conflict.Start:yyyy-MM-dd} to {conflict.End:yyyy-MM-dd}"
+                    );
+                }
+
+                await _db.ExecuteAsync(
+                    "INSERT OR IGNORE INTO Guests(Email, Name) VALUES(@GuestEmail, @GuestEmail)",
+                    new { request.GuestEmail },
+                    transaction
+                );
+
+                var reservation = new Reservation
+                {
+                    Id = Guid.NewGuid(),
+                    RoomNumber = request.RoomNumber,
+                    GuestEmail = request.GuestEmail,
+                    Start = request.Start,
+                    End = request.End
+                };
+
+                var created = await _db.QuerySingleAsync<Reservation>(
+                    @"INSERT INTO Reservations(Id, GuestEmail, RoomNumber, Start, End)
+                      VALUES(@Id, @GuestEmail, @RoomNumber, @Start, @End)
+                      RETURNING *",
+                    reservation,
+                    transaction
+                );
+
+                transaction.Commit();
+                return created;
+            }
+            catch
+            {
+                transaction.Rollback();
+                throw;
+            }
         }
 
         public async Task DeleteReservation(Guid reservationId)

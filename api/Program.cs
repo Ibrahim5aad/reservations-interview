@@ -1,9 +1,13 @@
 using System.Data;
+using Dapper;
 using Db;
 using Microsoft.Data.Sqlite;
 using Repositories;
 using Extensions;
+using FluentValidation;
 using Middlewares;
+
+SqlMapper.AddTypeHandler(new GuidTypeHandler());
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -24,6 +28,7 @@ var builder = WebApplication.CreateBuilder(args);
     {
         opt.EnableEndpointRouting = false;
     });
+    Services.AddValidatorsFromAssemblyContaining<Program>();
     Services.AddCors();
     Services.AddEndpointsApiExplorer();
     Services.AddSwaggerGen();
@@ -35,7 +40,13 @@ var logger = app.Services.GetRequiredService<ILogger<Program>>();
 {
     try
     {
-        Setup.EnsureDb(app.Services.CreateScope());
+        var db = app.Services.GetRequiredService<SqliteConnection>();
+        await Setup.EnsureDb(db);
+
+        if (app.Environment.IsDevelopment() || app.Environment.EnvironmentName == "Testing")
+        {
+            await Seed.SeedData(db);
+        }
     }
     catch (Exception ex)
     {

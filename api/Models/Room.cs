@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Models.Errors;
 
 namespace Models
@@ -8,9 +9,8 @@ namespace Models
     public class Room
     {
         /// <summary>
-        /// PKID For Rooms. MewsHotel format is a three digit number with the first
-        /// number being the floor number (up to 9) and the remaining two digits
-        /// as the number of the door on the floor
+        /// PKID For Rooms. Format is "###" where first digit is floor (1-9)
+        /// and last two digits are the door number (01-99).
         /// </summary>
         public required string Number { get; set; }
 
@@ -19,25 +19,17 @@ namespace Models
         /// </summary>
         public State State { get; set; } = State.Ready;
 
-        /// <summary>
-        /// Formats the room number filling it with 0s
-        /// to get a three digit string
-        /// </summary>
-        /// <returns></returns>
-        public static string FormatRoomNumber(int number)
-        {
-            return number.ToString().PadLeft(3, '0');
-        }
+        private static readonly Regex RoomNumberPattern = new(@"^[1-9]\d{2}$");
 
-        public static int ConvertRoomNumberToInt(string roomNumber)
+        /// <summary>
+        /// Validates the room number format. Must be 3 digits, first digit 1-9, last two not "00".
+        /// </summary>
+        public static void ValidateRoomNumber(string roomNumber)
         {
-            var success = int.TryParse(roomNumber, out int roomNumberInt);
-            if (!success)
+            if (!RoomNumberPattern.IsMatch(roomNumber) || roomNumber[1..] == "00")
             {
                 throw new ValidationException(nameof(Room), roomNumber, $"The value {roomNumber} is not a valid room number");
             }
-
-            return roomNumberInt;
         }
     }
 

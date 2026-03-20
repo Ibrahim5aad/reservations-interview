@@ -1,7 +1,8 @@
 using System.Net;
 using System.Text.Json;
-using System.Text.Json.Serialization;
+using Contracts;
 using Models.Errors;
+using FluentValidationException = FluentValidation.ValidationException;
 
 namespace Middlewares
 {
@@ -29,6 +30,10 @@ namespace Middlewares
             {
                 await SetResponse(e, httpContext, HttpStatusCode.BadRequest);
             }
+            catch (FluentValidationException e)
+            {
+                await SetValidationResponse(e, httpContext);
+            }
             catch(Exception e)
             {
                 await SetResponse(e, httpContext, HttpStatusCode.InternalServerError);
@@ -44,25 +49,46 @@ namespace Middlewares
             }
 
             var response = e is ResourceException resourceException
-                ? new 
-                {
-                    resourceException.ResourceType,
-                    resourceException.ResourceId,
-                    Detail = GetMessage(resourceException, code),
-                    Title = code.ToString(),
-                }
-                : new 
-                {
-                    ResourceType = "",
-                    ResourceId = "",
-                    Detail = e.Message,
-                    Title = code.ToString()
-                };
+                ? new ErrorResponse(
+                    Title: code.ToString(),
+                    Detail: GetMessage(resourceException, code),
+                    ResourceType: resourceException.ResourceType,
+                    ResourceId: resourceException.ResourceId
+                )
+                : new ErrorResponse(
+                    Title: code.ToString(),
+                    Detail: e.Message
+                );
 
             httpContext.Response.StatusCode = (int)code;
             httpContext.Response.ContentType = "application/json";
 
-            var content = JsonSerializer.Serialize(response); // pascal case
+            var content = JsonSerializer.Serialize(response);
+            await httpContext.Response.WriteAsync(content);
+        }
+
+        private async Task SetValidationResponse(FluentValidationException e, HttpContext httpContext)
+        {
+            if (httpContext.Response.HasStarted)
+            {
+                _logger.LogWarning("Response has already started, cannot write error details");
+                return;
+            }
+
+            var errors = e.Errors
+                .GroupBy(f => f.PropertyName)
+                .ToDictionary(g => g.Key, g => g.Select(f => f.ErrorMessage).ToArray());
+
+            var response = new ErrorResponse(
+                Title: "BadRequest",
+                Detail: "One or more validation errors occurred",
+                Errors: errors
+            );
+
+            httpContext.Response.StatusCode = (int)HttpStatusCode.BadRequest;
+            httpContext.Response.ContentType = "application/json";
+
+            var content = JsonSerializer.Serialize(response);
             await httpContext.Response.WriteAsync(content);
         }
 

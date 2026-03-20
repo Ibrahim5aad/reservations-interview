@@ -1,6 +1,7 @@
 using System.Data;
 using Dapper;
 using Models;
+using Contracts;
 using Models.Errors;
 
 namespace Repositories
@@ -16,99 +17,79 @@ namespace Repositories
 
         public async Task<IEnumerable<Reservation>> GetReservations()
         {
-            var reservations = await _db.QueryAsync<ReservationDb>("SELECT * FROM Reservations");
+            var reservations = await _db.QueryAsync<Reservation>("SELECT * FROM Reservations");
 
             if (reservations == null)
             {
                 return [];
             }
 
-            return reservations.Select(r => r.ToDomain());
+            return reservations;
         }
 
         /// <summary>
         /// Find a reservation by its Guid ID, throwing if not found
         /// </summary>
-        /// <param name="reservationId"></param>
-        /// <returns cref="Reservation">An existing reservation</returns>
         /// <exception cref="NotFoundException"></exception>
         public async Task<Reservation> GetReservation(Guid reservationId)
         {
-            var reservationIdStr = reservationId.ToString();
-
-            var reservation = await _db.QueryFirstOrDefaultAsync<ReservationDb>(
-                "SELECT * FROM Reservations WHERE Id = @reservationIdStr;",
-                new { reservationIdStr = reservationIdStr }
+            var reservation = await _db.QueryFirstOrDefaultAsync<Reservation>(
+                "SELECT * FROM Reservations WHERE Id = @reservationId;",
+                new { reservationId }
             );
 
             if (reservation == null)
             {
-                throw new NotFoundException(nameof(Reservation), reservationIdStr);
+                throw new NotFoundException(nameof(Reservation), reservationId.ToString());
             }
 
-            return reservation.ToDomain();
+            return reservation;
         }
 
-        public async Task<Reservation> CreateReservation(Reservation newReservation)
+        public async Task<Reservation> CreateReservation(ReservationRequest request)
         {
-            // TODO Implement
-            return await Task.FromResult(
-                new Reservation { RoomNumber = "000", GuestEmail = "todo" }
+
+            ArgumentNullException.ThrowIfNull(request);
+
+            var room = await _db.QueryFirstOrDefaultAsync<Room>(
+                "SELECT * FROM Rooms WHERE Number = @RoomNumber;",
+                new { request.RoomNumber }
+            ) ?? throw new NotFoundException(nameof(Room), request.RoomNumber);
+
+            await _db.ExecuteAsync(
+                "INSERT OR IGNORE INTO Guests(Email, Name) VALUES(@GuestEmail, @GuestEmail)",
+                new { request.GuestEmail }
             );
+
+            var reservation = new Reservation
+            {
+                Id = Guid.NewGuid(),
+                RoomNumber = request.RoomNumber,
+                GuestEmail = request.GuestEmail,
+                Start = request.Start,
+                End = request.End
+            };
+
+            var created = await _db.QuerySingleAsync<Reservation>(
+                @"INSERT INTO Reservations(Id, GuestEmail, RoomNumber, Start, End)
+                  VALUES(@Id, @GuestEmail, @RoomNumber, @Start, @End)
+                  RETURNING *",
+                reservation
+            );
+
+            return created;
         }
 
-        public async Task<bool> DeleteReservation(Guid reservationId)
+        public async Task DeleteReservation(Guid reservationId)
         {
             var deleted = await _db.ExecuteAsync(
-                "DELETE FROM Reservations WHERE Id = @reservationIdStr;",
-                new { reservationIdStr = reservationId.ToString() }
+                "DELETE FROM Reservations WHERE Id = @reservationId;",
+                new { reservationId }
             );
 
-            return deleted > 0;
-        }
-
-        private class ReservationDb
-        {
-            public string Id { get; set; }
-            public int RoomNumber { get; set; }
-
-            public string GuestEmail { get; set; }
-
-            public DateTime Start { get; set; }
-            public DateTime End { get; set; }
-            public bool CheckedIn { get; set; }
-            public bool CheckedOut { get; set; }
-
-            public ReservationDb()
+            if (deleted == 0)
             {
-                Id = Guid.Empty.ToString();
-                RoomNumber = 0;
-                GuestEmail = "";
-            }
-
-            public ReservationDb(Reservation reservation)
-            {
-                Id = reservation.Id.ToString();
-                RoomNumber = Room.ConvertRoomNumberToInt(reservation.RoomNumber);
-                GuestEmail = reservation.GuestEmail;
-                Start = reservation.Start;
-                End = reservation.End;
-                CheckedIn = reservation.CheckedIn;
-                CheckedOut = reservation.CheckedOut;
-            }
-
-            public Reservation ToDomain()
-            {
-                return new Reservation
-                {
-                    Id = Guid.Parse(Id),
-                    RoomNumber = Room.FormatRoomNumber(RoomNumber),
-                    GuestEmail = GuestEmail,
-                    Start = Start,
-                    End = End,
-                    CheckedIn = CheckedIn,
-                    CheckedOut = CheckedOut
-                };
+                throw new NotFoundException(nameof(Reservation), reservationId.ToString());
             }
         }
     }

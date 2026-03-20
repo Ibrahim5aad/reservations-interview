@@ -4,11 +4,11 @@ using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace api.IntegrationTests;
 
-public class ExceptionHandlingTests : IClassFixture<WebApplicationFactory<Program>>
+public class ExceptionHandlingTests : IClassFixture<TestWebApplicationFactory>
 {
     private readonly HttpClient _client;
 
-    public ExceptionHandlingTests(WebApplicationFactory<Program> factory)
+    public ExceptionHandlingTests(TestWebApplicationFactory factory)
     {
         _client = factory.CreateClient();
     }

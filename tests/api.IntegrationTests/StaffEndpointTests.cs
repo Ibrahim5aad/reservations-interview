@@ -1,0 +1,171 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text.Json;
+using Contracts;
+using Models;
+
+namespace api.IntegrationTests;
+
+public class StaffEndpointTests : IClassFixture<TestWebApplicationFactory>
+{
+    private readonly HttpClient _client;
+    private static readonly JsonSerializerOptions _jsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+
+    public StaffEndpointTests(TestWebApplicationFactory factory)
+    {
+        _client = factory.CreateClient();
+    }
+
+    private async Task<string> GetStaffToken()
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/staff/login");
+        request.Headers.Add("X-Staff-Code", "pass");
+
+        var response = await _client.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        return body.GetProperty("token").GetString()!;
+    }
+
+    private async Task<HttpClient> GetAuthenticatedClient()
+    {
+        var token = await GetStaffToken();
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return _client;
+    }
+
+    [Fact]
+    public async Task Login_with_valid_code_returns_token()
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/staff/login");
+        request.Headers.Add("X-Staff-Code", "pass");
+
+        var response = await _client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.True(body.TryGetProperty("token", out var token));
+        Assert.False(string.IsNullOrEmpty(token.GetString()));
+    }
+
+    [Fact]
+    public async Task Login_with_invalid_code_returns_401()
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/staff/login");
+        request.Headers.Add("X-Staff-Code", "wrong");
+
+        var response = await _client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Get_reservations_without_token_returns_401()
+    {
+        var client = _client;
+        client.DefaultRequestHeaders.Authorization = null;
+
+        var response = await client.GetAsync("/api/reservations");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Get_reservations_with_token_returns_200()
+    {
+        var client = await GetAuthenticatedClient();
+
+        var response = await client.GetAsync("/api/reservations");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Get_reservations_filtered_by_from_date()
+    {
+        var client = await GetAuthenticatedClient();
+
+        // Create a reservation for the future
+        var booking = new ReservationRequest
+        {
+            RoomNumber = "104",
+            GuestEmail = "staff-test@mjail.com",
+            Start = DateTime.Today.AddDays(50),
+            End = DateTime.Today.AddDays(53)
+        };
+        var createResponse = await client.PostAsJsonAsync("/api/reservations", booking);
+        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+
+        // should include our booking
+        var from = DateTime.Today.AddDays(1).ToString("yyyy-MM-dd");
+        var response = await client.GetAsync($"/api/reservations?from={from}");
+        var reservations = await response.Content.ReadFromJsonAsync<List<Reservation>>(_jsonOptions);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(reservations);
+        Assert.Contains(reservations, r => r.RoomNumber == "104");
+    }
+
+    [Fact]
+    public async Task Get_reservations_filtered_by_room_number()
+    {
+        var client = await GetAuthenticatedClient();
+
+        // Create a reservation
+        var booking = new ReservationRequest
+        {
+            RoomNumber = "105",
+            GuestEmail = "room-filter@mjail.com",
+            Start = DateTime.Today.AddDays(60),
+            End = DateTime.Today.AddDays(63)
+        };
+        await client.PostAsJsonAsync("/api/reservations", booking);
+
+        var response = await client.GetAsync("/api/reservations?roomNumber=105");
+        var reservations = await response.Content.ReadFromJsonAsync<List<Reservation>>(_jsonOptions);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(reservations);
+        Assert.All(reservations, r => Assert.Equal("105", r.RoomNumber));
+    }
+
+    [Fact]
+    public async Task Get_reservations_filtered_by_guest_email()
+    {
+        var client = await GetAuthenticatedClient();
+
+        // Create a reservation
+        var booking = new ReservationRequest
+        {
+            RoomNumber = "201",
+            GuestEmail = "email-filter@mjail.com",
+            Start = DateTime.Today.AddDays(70),
+            End = DateTime.Today.AddDays(73)
+        };
+        await client.PostAsJsonAsync("/api/reservations", booking);
+
+        var response = await client.GetAsync("/api/reservations?guestEmail=email-filter@mjail.com");
+        var reservations = await response.Content.ReadFromJsonAsync<List<Reservation>>(_jsonOptions);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(reservations);
+        Assert.All(reservations, r => Assert.Equal("email-filter@mjail.com", r.GuestEmail));
+    }
+
+    [Fact]
+    public async Task Delete_reservation_without_token_returns_401()
+    {
+        var client = _client;
+        client.DefaultRequestHeaders.Authorization = null;
+
+        var response = await client.DeleteAsync($"/api/reservations/{Guid.NewGuid()}");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+}

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { ISO8601String, toIsoStr } from "../utils/datetime";
-import ky, { HTTPError } from "ky";
+import { HTTPError } from "ky";
+import { api } from "../utils/api-client";
 import { z } from "zod";
 
 export interface NewReservation {
@@ -40,7 +41,7 @@ const RoomSchema = z.object({
 const RoomListSchema = RoomSchema.array();
 
 
-/**  ----- API  ---- */
+/**----- API  ---- */
 
 export async function bookRoom(booking: NewReservation): Promise<Reservation> {
   const body = {
@@ -49,8 +50,8 @@ export async function bookRoom(booking: NewReservation): Promise<Reservation> {
     end: toIsoStr(booking.end),
   };
 
-  return ky
-    .post("api/reservations", { json: body })
+  return api
+    .post("/api/reservations", { json: body })
     .json()
     .then(ReservationSchema.parseAsync);
 }
@@ -76,6 +77,6 @@ export async function parseApiError(error: unknown): Promise<string[]> {
 export function useGetRooms() {
   return useQuery({
     queryKey: ["rooms"],
-    queryFn: () => ky.get("api/rooms").json().then(RoomListSchema.parseAsync),
+    queryFn: () => api.get("/api/rooms").json().then(RoomListSchema.parseAsync),
   });
 }

@@ -1,7 +1,10 @@
 using System.Data;
+using System.Text;
 using Dapper;
 using Db;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Data.Sqlite;
+using Microsoft.IdentityModel.Tokens;
 using Repositories;
 using Extensions;
 using FluentValidation;
@@ -29,6 +32,20 @@ var builder = WebApplication.CreateBuilder(args);
         opt.EnableEndpointRouting = false;
     });
     Services.AddValidatorsFromAssemblyContaining<Program>();
+    Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+        .AddJwtBearer(options =>
+        {
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = false,
+                ValidateAudience = false,
+                ValidateLifetime = true,
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKey = new SymmetricSecurityKey(
+                    Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
+            };
+        });
+    Services.AddAuthorization();
     Services.AddCors();
     Services.AddEndpointsApiExplorer();
     Services.AddSwaggerGen();
@@ -40,7 +57,8 @@ var logger = app.Services.GetRequiredService<ILogger<Program>>();
 {
     try
     {
-        var db = app.Services.GetRequiredService<SqliteConnection>();
+        using var scope = app.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SqliteConnection>();
         await Setup.EnsureDb(db);
 
         if (app.Environment.IsDevelopment() || app.Environment.EnvironmentName == "Testing")
@@ -58,6 +76,8 @@ var logger = app.Services.GetRequiredService<ILogger<Program>>();
     app.UseMiddleware<ExceptionHandlingMiddleware>();
 
     app.UsePathBase("/api")
+        .UseAuthentication()
+        .UseAuthorization()
         .UseMvc()
         .UseCors(p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader())
         .UseSwagger()

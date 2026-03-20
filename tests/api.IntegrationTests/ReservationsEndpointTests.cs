@@ -49,17 +49,6 @@ public class ReservationsEndpointTests : IClassFixture<TestWebApplicationFactory
     }
 
     [Fact]
-    public async Task Get_reservations_returns_200()
-    {
-        var response = await _client.GetAsync("/api/reservations");
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-
-        var reservations = await response.Content.ReadFromJsonAsync<List<Reservation>>(_jsonOptions);
-        Assert.NotNull(reservations);
-    }
-
-    [Fact]
     public async Task Get_nonexistent_reservation_returns_404()
     {
         var fakeId = Guid.NewGuid();

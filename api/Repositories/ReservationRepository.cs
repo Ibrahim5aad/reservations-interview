@@ -15,16 +15,43 @@ namespace Repositories
             _db = db;
         }
 
-        public async Task<IEnumerable<Reservation>> GetReservations()
+        public async Task<IEnumerable<Reservation>> GetReservations(
+            DateTime? from = null,
+            DateTime? to = null,
+            string? roomNumber = null,
+            string? guestEmail = null)
         {
-            var reservations = await _db.QueryAsync<Reservation>("SELECT * FROM Reservations");
+            var sql = "SELECT * FROM Reservations WHERE 1=1";
+            var parameters = new DynamicParameters();
 
-            if (reservations == null)
+            if (from.HasValue)
             {
-                return [];
+                sql += " AND [End] >= @From";
+                parameters.Add("From", from.Value);
             }
 
-            return reservations;
+            if (to.HasValue)
+            {
+                sql += " AND Start <= @To";
+                parameters.Add("To", to.Value);
+            }
+
+            if (!string.IsNullOrEmpty(roomNumber))
+            {
+                sql += " AND RoomNumber = @RoomNumber";
+                parameters.Add("RoomNumber", roomNumber);
+            }
+
+            if (!string.IsNullOrEmpty(guestEmail))
+            {
+                sql += " AND GuestEmail LIKE @GuestEmail";
+                parameters.Add("GuestEmail", $"%{guestEmail}%");
+            }
+
+            sql += " ORDER BY Start";
+
+            var reservations = await _db.QueryAsync<Reservation>(sql, parameters);
+            return reservations ?? [];
         }
 
         /// <summary>

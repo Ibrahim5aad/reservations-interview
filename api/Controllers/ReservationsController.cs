@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Contracts;
 using FluentValidation;
@@ -19,11 +20,16 @@ namespace Controllers
             _validator = validator;
         }
 
+        [Authorize]
         [HttpGet, Produces("application/json"), Route("")]
         [ProducesResponseType(typeof(IEnumerable<Reservation>), StatusCodes.Status200OK)]
-        public async Task<ActionResult<Reservation>> GetReservations()
+        public async Task<ActionResult<IEnumerable<Reservation>>> GetReservations(
+            [FromQuery] DateTime? from,
+            [FromQuery] DateTime? to,
+            [FromQuery] string? roomNumber,
+            [FromQuery] string? guestEmail)
         {
-            var reservations = await _repo.GetReservations();
+            var reservations = await _repo.GetReservations(from, to, roomNumber, guestEmail);
 
             return Ok(reservations);
         }
@@ -54,6 +60,7 @@ namespace Controllers
             return Created($"/reservations/{createdReservation.Id}", createdReservation);
         }
 
+        [Authorize]
         [HttpDelete, Produces("application/json"), Route("{reservationId}")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]

@@ -15,6 +15,11 @@ namespace Middlewares
         RequestDelegate next,
         ILogger<ExceptionHandlingMiddleware> _logger)
     {
+        private static readonly JsonSerializerOptions _jsonOptions = new()
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+        };
         
         public async Task InvokeAsync(HttpContext httpContext)
         {
@@ -63,7 +68,7 @@ namespace Middlewares
             httpContext.Response.StatusCode = (int)code;
             httpContext.Response.ContentType = "application/json";
 
-            var content = JsonSerializer.Serialize(response);
+            var content = JsonSerializer.Serialize(response, _jsonOptions);
             await httpContext.Response.WriteAsync(content);
         }
 
@@ -88,7 +93,7 @@ namespace Middlewares
             httpContext.Response.StatusCode = (int)HttpStatusCode.BadRequest;
             httpContext.Response.ContentType = "application/json";
 
-            var content = JsonSerializer.Serialize(response);
+            var content = JsonSerializer.Serialize(response, _jsonOptions);
             await httpContext.Response.WriteAsync(content);
         }
 

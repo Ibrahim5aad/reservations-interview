@@ -106,7 +106,7 @@ public class ReservationRequestValidatorTests
         var result = _validator.TestValidate(request);
 
         result.ShouldHaveValidationErrorFor(x => x.Start)
-            .WithErrorMessage("Time travellers are not welcomed in the Mewstel");;
+            .WithErrorMessage("Time travellers are not welcomed in Mewstel");;
     }
 
     [Fact]

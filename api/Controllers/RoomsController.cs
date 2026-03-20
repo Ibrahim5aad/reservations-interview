@@ -4,8 +4,9 @@ using Repositories;
 
 namespace Controllers
 {
+    [ApiController]
     [Tags("Rooms"), Route("rooms")]
-    public class RoomsController : Controller
+    public class RoomsController : ControllerBase
     {
         private RoomRepository _repo { get; set; }
 
@@ -21,10 +22,10 @@ namespace Controllers
 
             if (rooms == null)
             {
-                return Json(Enumerable.Empty<Room>());
+                return Ok(Enumerable.Empty<Room>());
             }
 
-            return Json(rooms);
+            return Ok(rooms);
         }
 
         [HttpGet, Produces("application/json"), Route("{roomNumber}")]
@@ -32,7 +33,7 @@ namespace Controllers
         {
             var room = await _repo.GetRoom(roomNumber);
 
-            return Json(room);
+            return Ok(room);
         }
 
         [HttpPost, Produces("application/json"), Route("")]
@@ -45,7 +46,7 @@ namespace Controllers
                 return NotFound();
             }
 
-            return Json(createdRoom);
+            return Ok(createdRoom);
         }
 
         [HttpDelete, Produces("application/json"), Route("{roomNumber}")]

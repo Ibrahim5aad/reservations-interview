@@ -22,7 +22,7 @@ namespace Validators
             RuleFor(x => x.Start)
                 .NotEmpty().WithMessage("Start date is required")
                 .LessThan(x => x.End).WithMessage("Start date must be before end date")
-                .Must(start => start >= DateTime.Today).WithMessage("Time travellers are not welcomed in the Mewstel");
+                .Must(start => start >= DateTime.Today).WithMessage("Time travellers are not welcomed in Mewstel");
 
             RuleFor(x => x.End)
                 .NotEmpty().WithMessage("End date is required")

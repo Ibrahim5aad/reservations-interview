@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { useShowSuccessToast } from "../utils/toasts";
+import { useShowErrorToast } from "../utils/toasts";
+import { toast } from "sonner";
 import { Grid, Heading, Section, Dialog } from "@radix-ui/themes";
 import { ReservationCard } from "./ReservationCard";
-import { bookRoom, NewReservation, useGetRooms } from "./api";
+import { bookRoom, parseApiError, NewReservation, Reservation, useGetRooms } from "./api";
 import { LoadingCard } from "../components/LoadingCard";
 import { BookingDetailsModal } from "./BookingDetailsModal";
+import { BookingConfirmationModal } from "./BookingConfirmationModal";
 
 const RESPONSIVE_GRID_COLS: React.ComponentProps<typeof Grid>["columns"] = {
   sm: "1",
@@ -18,14 +20,25 @@ export function ReservationPage() {
 
   const formattedRoomNumber = String(selectedRoomNumber).padStart(3, "0");
 
-  const showToast = useShowSuccessToast("We have received your booking!");
+  const [confirmedReservation, setConfirmedReservation] = useState<Reservation | null>(null);
+  const showError = useShowErrorToast();
 
   function onClose() {
     setSelectedRoomNumber("");
   }
 
-  function onSubmit(booking: NewReservation) {
-    bookRoom(booking).then(onClose).then(showToast);
+  async function onSubmit(booking: NewReservation) {
+    const toastId = toast.loading("Processing booking...");
+    try {
+      const reservation = await bookRoom(booking);
+      toast.dismiss(toastId);
+      onClose();
+      setConfirmedReservation(reservation);
+    } catch (error) {
+      toast.dismiss(toastId);
+      const errors = await parseApiError(error);
+      showError(errors);
+    }
   }
 
   const createClickHandler = (roomNumber: string) => () => {
@@ -56,6 +69,13 @@ export function ReservationPage() {
           />
         </Dialog.Root>
       </Grid>
+
+      {confirmedReservation && (
+        <BookingConfirmationModal
+          reservation={confirmedReservation}
+          onClose={() => setConfirmedReservation(null)}
+        />
+      )}
     </Section>
   );
 }

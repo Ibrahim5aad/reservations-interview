@@ -1,16 +1,15 @@
 using Microsoft.AspNetCore.Mvc;
 using Models;
-using Models.Errors;
 using Repositories;
 
 namespace Controllers
 {
-    [Tags("Reservations"), Route("reservation")]
-    public class ReservationController : Controller
+    [Tags("Reservations"), Route("reservations")]
+    public class ReservationsController : Controller
     {
         private ReservationRepository _repo { get; set; }
 
-        public ReservationController(ReservationRepository reservationRepository)
+        public ReservationsController(ReservationRepository reservationRepository)
         {
             _repo = reservationRepository;
         }
@@ -26,15 +25,9 @@ namespace Controllers
         [HttpGet, Produces("application/json"), Route("{reservationId}")]
         public async Task<ActionResult<Reservation>> GetRoom(Guid reservationId)
         {
-            try
-            {
-                var reservation = await _repo.GetReservation(reservationId);
-                return Json(reservation);
-            }
-            catch (NotFoundException)
-            {
-                return NotFound();
-            }
+            var reservation = await _repo.GetReservation(reservationId);
+            
+            return Json(reservation);
         }
 
         /// <summary>
@@ -53,18 +46,8 @@ namespace Controllers
                 newBooking.Id = Guid.NewGuid();
             }
 
-            try
-            {
-                var createdReservation = await _repo.CreateReservation(newBooking);
-                return Created($"/reservation/${createdReservation.Id}", createdReservation);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("An error occured when trying to book a reservation:");
-                Console.WriteLine(ex.ToString());
-
-                return BadRequest("Invalid reservation");
-            }
+            var createdReservation = await _repo.CreateReservation(newBooking);
+            return Created($"/reservation/${createdReservation.Id}", createdReservation);
         }
 
         [HttpDelete, Produces("application/json"), Route("{reservationId}")]

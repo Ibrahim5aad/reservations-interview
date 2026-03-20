@@ -4,12 +4,12 @@ using Repositories;
 
 namespace Controllers
 {
-    [Tags("Guests"), Route("guest")]
-    public class GuestController : Controller
+    [Tags("Guests"), Route("guests")]
+    public class GuestsController : Controller
     {
         private GuestRepository _repo;
 
-        public GuestController(GuestRepository guestRepository)
+        public GuestsController(GuestRepository guestRepository)
         {
             _repo = guestRepository;
         }

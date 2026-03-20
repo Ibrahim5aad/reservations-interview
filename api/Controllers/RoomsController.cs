@@ -1,16 +1,15 @@
 using Microsoft.AspNetCore.Mvc;
 using Models;
-using Models.Errors;
 using Repositories;
 
 namespace Controllers
 {
-    [Tags("Rooms"), Route("room")]
-    public class RoomController : Controller
+    [Tags("Rooms"), Route("rooms")]
+    public class RoomsController : Controller
     {
         private RoomRepository _repo { get; set; }
 
-        public RoomController(RoomRepository roomRepository)
+        public RoomsController(RoomRepository roomRepository)
         {
             _repo = roomRepository;
         }
@@ -31,21 +30,9 @@ namespace Controllers
         [HttpGet, Produces("application/json"), Route("{roomNumber}")]
         public async Task<ActionResult<Room>> GetRoom(string roomNumber)
         {
-            if (roomNumber.Length != 3)
-            {
-                return BadRequest("Invalid room ID - format is ###, ex 001 / 002 / 101");
-            }
+            var room = await _repo.GetRoom(roomNumber);
 
-            try
-            {
-                var room = await _repo.GetRoom(roomNumber);
-
-                return Json(room);
-            }
-            catch (NotFoundException)
-            {
-                return NotFound();
-            }
+            return Json(room);
         }
 
         [HttpPost, Produces("application/json"), Route("")]

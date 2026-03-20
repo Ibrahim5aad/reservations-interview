@@ -43,6 +43,6 @@ const RoomListSchema = RoomSchema.array();
 export function useGetRooms() {
   return useQuery({
     queryKey: ["rooms"],
-    queryFn: () => ky.get("api/room").json().then(RoomListSchema.parseAsync),
+    queryFn: () => ky.get("api/rooms").json().then(RoomListSchema.parseAsync),
   });
 }

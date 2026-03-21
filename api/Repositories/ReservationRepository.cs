@@ -156,20 +156,92 @@ namespace Repositories
 
             if (reservation.Start > DateTime.Today || reservation.End <= DateTime.Today)
             {
-                throw new ValidationException(nameof(Reservation), reservationId.ToString(), "Check-in is only allowed on the reservation start date");
+                throw new ValidationException(nameof(Reservation), reservationId.ToString(), "Check-in is only allowed during the reservation period");
             }
 
-            await _db.ExecuteAsync(
-                "UPDATE Reservations SET CheckedIn = 1 WHERE Id = @reservationId",
-                new { reservationId }
+            var room = await _db.QueryFirstOrDefaultAsync<Room>(
+                "SELECT * FROM Rooms WHERE Number = @RoomNumber",
+                new { reservation.RoomNumber }
             );
 
-            await _db.ExecuteAsync(
-                "UPDATE Rooms SET State = @State WHERE Number = @RoomNumber",
-                new { State = (int)State.Occupied, reservation.RoomNumber }
-            );
+            if (room != null && room.State == State.Dirty)
+            {
+                throw new ValidationException(nameof(Reservation), reservationId.ToString(), "Cannot check in to a dirty room. Room must be cleaned first");
+            }
+
+            using var transaction = _db.BeginSerializableTransaction();
+            try
+            {
+                await _db.ExecuteAsync(
+                    "UPDATE Reservations SET CheckedIn = 1 WHERE Id = @reservationId",
+                    new { reservationId },
+                    transaction
+                );
+
+                await _db.ExecuteAsync(
+                    "UPDATE Rooms SET State = @State WHERE Number = @RoomNumber",
+                    new { State = (int)State.Occupied, reservation.RoomNumber },
+                    transaction
+                );
+
+                transaction.Commit();
+            }
+            catch
+            {
+                transaction.Rollback();
+                throw;
+            }
 
             reservation.CheckedIn = true;
+            return reservation;
+        }
+
+        public async Task<Reservation> CheckOut(Guid reservationId, string guestEmail)
+        {
+            var reservation = await GetReservation(reservationId);
+
+            if (!string.Equals(reservation.GuestEmail, guestEmail, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ValidationException(nameof(Reservation), reservationId.ToString(), "Guest email does not match the reservation");
+            }
+
+            if (!reservation.CheckedIn)
+            {
+                throw new ValidationException(nameof(Reservation), reservationId.ToString(), "Guest has not checked in yet");
+            }
+
+            if (reservation.CheckedOut)
+            {
+                throw new ConflictException(nameof(Reservation), reservationId.ToString(), "Reservation is already checked out");
+            }
+
+            var checkedOutAt = DateTime.Now;
+
+            using var transaction = _db.BeginSerializableTransaction();
+            try
+            {
+                await _db.ExecuteAsync(
+                    "UPDATE Reservations SET CheckedOut = 1, CheckedOutAt = @checkedOutAt WHERE Id = @reservationId",
+                    new { reservationId, checkedOutAt },
+                    transaction
+                );
+
+                await _db.ExecuteAsync(
+                    "UPDATE Rooms SET State = @State WHERE Number = @RoomNumber",
+                    new { State = (int)State.Dirty, reservation.RoomNumber },
+                    transaction
+                );
+
+                transaction.Commit();
+            }
+            catch
+            {
+                transaction.Rollback();
+                throw;
+            }
+
+            reservation.CheckedOut = true;
+            reservation.CheckedOutAt = checkedOutAt;
             return reservation;
         }
 

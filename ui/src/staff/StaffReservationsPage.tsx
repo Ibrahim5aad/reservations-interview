@@ -3,8 +3,8 @@ import { Badge, Box, Button, Card, Flex, Heading, Section, Select, Table, Text, 
 import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../utils/auth";
-import { checkInReservation, ReservationFilters, StaffReservation, useGetStaffReservations } from "./api";
-import { useGetRooms } from "../reservations/api";
+import { checkInReservation, checkOutReservation, RoomStateLabels, ReservationFilters, StaffReservation, useGetStaffReservations } from "./api";
+import { Room, useGetRooms } from "../reservations/api";
 import { parseApiError } from "../reservations/api";
 import { useShowErrorToast, useShowSuccessToast } from "../utils/toasts";
 import { LoadingCard } from "../components/LoadingCard";
@@ -25,25 +25,50 @@ export function StaffReservationsPage() {
   const { data: rooms } = useGetRooms();
   const queryClient = useQueryClient();
   const showError = useShowErrorToast();
-  const showSuccess = useShowSuccessToast("Guest checked in successfully!");
+  const showCheckInSuccess = useShowSuccessToast("Guest checked in successfully!");
+  const showCheckOutSuccess = useShowSuccessToast("Guest checked out successfully!");
   const [checkingIn, setCheckingIn] = useState<string | null>(null);
+  const [checkingOut, setCheckingOut] = useState<string | null>(null);
+
+  const roomsByNumber = new Map(rooms?.map((r) => [r.number, r]) ?? []);
 
   function coversToday(start: string, end: string) {
     const today = new Date().toDateString();
     return new Date(start) <= new Date(today) && new Date(end) > new Date(today);
   }
 
+  function isRoomDirty(roomNumber: string) {
+    const room = roomsByNumber.get(roomNumber);
+    return room?.state === 2;
+  }
+
   async function handleCheckIn(r: StaffReservation) {
     setCheckingIn(r.id);
     try {
       await checkInReservation(token!, r.id, r.guestEmail);
-      showSuccess();
+      showCheckInSuccess();
       queryClient.invalidateQueries({ queryKey: ["staff-reservations"] });
+      queryClient.invalidateQueries({ queryKey: ["rooms"] });
     } catch (error) {
       const errors = await parseApiError(error);
       showError(errors);
     } finally {
       setCheckingIn(null);
+    }
+  }
+
+  async function handleCheckOut(r: StaffReservation) {
+    setCheckingOut(r.id);
+    try {
+      await checkOutReservation(token!, r.id, r.guestEmail);
+      showCheckOutSuccess();
+      queryClient.invalidateQueries({ queryKey: ["staff-reservations"] });
+      queryClient.invalidateQueries({ queryKey: ["rooms"] });
+    } catch (error) {
+      const errors = await parseApiError(error);
+      showError(errors);
+    } finally {
+      setCheckingOut(null);
     }
   }
 
@@ -126,7 +151,8 @@ export function StaffReservationsPage() {
               <Table.ColumnHeaderCell>Guest Email</Table.ColumnHeaderCell>
               <Table.ColumnHeaderCell>Check-in</Table.ColumnHeaderCell>
               <Table.ColumnHeaderCell>Check-out</Table.ColumnHeaderCell>
-              <Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
+              <Table.ColumnHeaderCell>Reservation Status</Table.ColumnHeaderCell>
+              <Table.ColumnHeaderCell>Room Status</Table.ColumnHeaderCell>
               <Table.ColumnHeaderCell></Table.ColumnHeaderCell>
             </Table.Row>
           </Table.Header>
@@ -139,20 +165,39 @@ export function StaffReservationsPage() {
                 <Table.Cell>{new Date(r.end).toLocaleDateString()}</Table.Cell>
                 <Table.Cell>
                   {r.checkedOut
-                    ? <Badge color="blue">Checked Out</Badge>
+                    ? <Badge color="blue">Checked Out {r.checkedOutAt && <Text weight="light" size="1">{new Date(r.checkedOutAt).toLocaleDateString()}</Text>}</Badge>
                     : r.checkedIn
                       ? <Badge color="green">Checked In</Badge>
                       : <Badge color="gray">Pending</Badge>}
+                </Table.Cell>
+                <Table.Cell>
+                  {(() => {
+                    const room = roomsByNumber.get(r.roomNumber);
+                    const label = room ? RoomStateLabels[room.state] ?? "Unknown" : "—";
+                    const color = room?.state === 0 ? "green" : room?.state === 1 ? "orange" : room?.state === 2 ? "yellow" : "gray";
+                    return <Badge color={color}>{label}</Badge>;
+                  })()}
                 </Table.Cell>
                 <Table.Cell>
                   {!r.checkedIn && coversToday(r.start, r.end) && (
                     <Button
                       size="1"
                       color="mint"
-                      disabled={checkingIn === r.id}
+                      disabled={checkingIn === r.id || isRoomDirty(r.roomNumber)}
                       onClick={() => handleCheckIn(r)}
+                      title={isRoomDirty(r.roomNumber) ? "Room must be cleaned first" : undefined}
                     >
                       {checkingIn === r.id ? "..." : "Check In"}
+                    </Button>
+                  )}
+                  {r.checkedIn && !r.checkedOut && (
+                    <Button
+                      size="1"
+                      color="orange"
+                      disabled={checkingOut === r.id}
+                      onClick={() => handleCheckOut(r)}
+                    >
+                      {checkingOut === r.id ? "..." : "Check Out"}
                     </Button>
                   )}
                 </Table.Cell>

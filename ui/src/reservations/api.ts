@@ -38,6 +38,8 @@ const RoomSchema = z.object({
   state: z.number(),
 });
 
+export type Room = z.infer<typeof RoomSchema>;
+
 const RoomListSchema = RoomSchema.array();
 
 

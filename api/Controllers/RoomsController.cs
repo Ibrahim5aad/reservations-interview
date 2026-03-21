@@ -41,6 +41,7 @@ namespace Controllers
             return Ok(room);
         }
 
+        [Authorize]
         [HttpPost, Produces("application/json"), Route("")]
         [ProducesResponseType(typeof(Room), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
@@ -102,6 +103,18 @@ namespace Controllers
             return Ok(new ImportResult(lineNumber, imported, errors.Count, errors));
         }
 
+        [Authorize]
+        [HttpPatch, Produces("application/json"), Route("{roomNumber}")]
+        [ProducesResponseType(typeof(Room), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        public async Task<ActionResult<Room>> UpdateRoomState(string roomNumber, [FromBody] UpdateRoomStateRequest request)
+        {
+            var room = await _repo.UpdateRoomState(roomNumber, request.State);
+            return Ok(room);
+        }
+
+        [Authorize]
         [HttpDelete, Produces("application/json"), Route("{roomNumber}")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]

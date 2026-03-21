@@ -1,11 +1,13 @@
 import { useMemo, useState } from "react";
 import { Badge, Box, Button, Card, Flex, Heading, Section, Select, Table, Text } from "@radix-ui/themes";
 import { useNavigate } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../utils/auth";
-import { useGetRooms } from "../reservations/api";
-import { RoomStateLabels } from "./api";
+import { useGetRooms, parseApiError } from "../reservations/api";
+import { RoomStateLabels, updateRoomState } from "./api";
 import { ImportRoomsDialog } from "./ImportRoomsDialog";
 import { LoadingCard } from "../components/LoadingCard";
+import { useShowErrorToast, useShowSuccessToast } from "../utils/toasts";
 
 const PAGE_SIZE = 20;
 
@@ -16,12 +18,31 @@ const STATE_COLORS: Record<number, "green" | "orange" | "yellow"> = {
 };
 
 export function StaffRoomsPage() {
-  const { isAuthenticated } = useAuth();
+  const { token, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { data: rooms, isLoading } = useGetRooms();
+  const showError = useShowErrorToast();
+  const showSuccess = useShowSuccessToast("Room status updated!");
   const [page, setPage] = useState(0);
   const [statusFilter, setStatusFilter] = useState("all");
   const [floorFilter, setFloorFilter] = useState("all");
+  const [updating, setUpdating] = useState<string | null>(null);
+
+  async function handleStateChange(roomNumber: string, newState: number) {
+    if (!token) return;
+    setUpdating(roomNumber);
+    try {
+      await updateRoomState(token, roomNumber, newState);
+      showSuccess();
+      queryClient.invalidateQueries({ queryKey: ["rooms"] });
+    } catch (error) {
+      const errors = await parseApiError(error);
+      showError(errors);
+    } finally {
+      setUpdating(null);
+    }
+  }
 
   if (!isAuthenticated) {
     navigate({ to: "/" });
@@ -112,6 +133,7 @@ export function StaffRoomsPage() {
                 <Table.ColumnHeaderCell>Room Number</Table.ColumnHeaderCell>
                 <Table.ColumnHeaderCell>Floor</Table.ColumnHeaderCell>
                 <Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell></Table.ColumnHeaderCell>
               </Table.Row>
             </Table.Header>
             <Table.Body>
@@ -123,6 +145,29 @@ export function StaffRoomsPage() {
                     <Badge color={STATE_COLORS[room.state] ?? "gray"}>
                       {RoomStateLabels[room.state] ?? "Unknown"}
                     </Badge>
+                  </Table.Cell>
+                  <Table.Cell>
+                    {room.state === 2 && (
+                      <Button
+                        size="1"
+                        color="green"
+                        disabled={updating === room.number}
+                        onClick={() => handleStateChange(room.number, 0)}
+                      >
+                        {updating === room.number ? "..." : "Mark Clean"}
+                      </Button>
+                    )}
+                    {room.state === 0 && (
+                      <Button
+                        size="1"
+                        color="yellow"
+                        variant="outline"
+                        disabled={updating === room.number}
+                        onClick={() => handleStateChange(room.number, 2)}
+                      >
+                        {updating === room.number ? "..." : "Mark Dirty"}
+                      </Button>
+                    )}
                   </Table.Cell>
                 </Table.Row>
               ))}

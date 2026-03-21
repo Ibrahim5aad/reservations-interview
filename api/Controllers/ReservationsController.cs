@@ -73,6 +73,18 @@ namespace Controllers
         }
 
         [Authorize]
+        [HttpPost, Produces("application/json"), Route("{reservationId}/check-out")]
+        [ProducesResponseType(typeof(Reservation), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status409Conflict)]
+        public async Task<ActionResult<Reservation>> CheckOut(Guid reservationId, [FromBody] CheckInRequest request)
+        {
+            var reservation = await _repo.CheckOut(reservationId, request.GuestEmail);
+            return Ok(reservation);
+        }
+
+        [Authorize]
         [HttpDelete, Produces("application/json"), Route("{reservationId}")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]

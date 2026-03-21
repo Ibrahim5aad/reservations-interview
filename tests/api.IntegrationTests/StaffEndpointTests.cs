@@ -250,6 +250,150 @@ public class StaffEndpointTests : IClassFixture<TestWebApplicationFactory>
         Assert.Contains("email", error.Detail, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task CheckIn_dirty_room_returns_400()
+    {
+        var client = await GetAuthenticatedClient();
+
+        // Create the room first
+        await client.PostAsJsonAsync("/api/rooms", new { number = "501", state = 0 });
+
+        var booking1 = new ReservationRequest
+        {
+            RoomNumber = "501",
+            GuestEmail = "first@mjail.com",
+            Start = DateTime.Today,
+            End = DateTime.Today.AddDays(1)
+        };
+        var create1 = await client.PostAsJsonAsync("/api/reservations", booking1);
+        var res1 = await create1.Content.ReadFromJsonAsync<Reservation>(_jsonOptions);
+        Assert.NotNull(res1);
+
+        await client.PostAsJsonAsync($"/api/reservations/{res1.Id}/check-in",
+            new { guestEmail = "first@mjail.com" });
+
+        // Check out to mark room dirty
+        await client.PostAsJsonAsync($"/api/reservations/{res1.Id}/check-out",
+            new { guestEmail = "first@mjail.com" });
+
+        await client.DeleteAsync($"/api/reservations/{res1.Id}");
+
+        // Try to check in another reservation 
+        var booking2 = new ReservationRequest
+        {
+            RoomNumber = "501",
+            GuestEmail = "second@mjail.com",
+            Start = DateTime.Today,
+            End = DateTime.Today.AddDays(3)
+        };
+        var create2 = await client.PostAsJsonAsync("/api/reservations", booking2);
+        var res2 = await create2.Content.ReadFromJsonAsync<Reservation>(_jsonOptions);
+        Assert.NotNull(res2);
+
+        var checkInResponse = await client.PostAsJsonAsync(
+            $"/api/reservations/{res2.Id}/check-in",
+            new { guestEmail = "second@mjail.com" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, checkInResponse.StatusCode);
+        var error = await checkInResponse.Content.ReadFromJsonAsync<ErrorResponse>(_jsonOptions);
+        Assert.NotNull(error);
+        Assert.Contains("dirty", error.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    #endregion
+
+    #region Check-out
+
+    [Fact]
+    public async Task CheckOut_checked_in_reservation_returns_200_and_marks_room_dirty()
+    {
+        var client = await GetAuthenticatedClient();
+
+        await client.PostAsJsonAsync("/api/rooms", new { number = "601", state = 0 });
+
+        var booking = new ReservationRequest
+        {
+            RoomNumber = "601",
+            GuestEmail = "checkout@mjail.com",
+            Start = DateTime.Today,
+            End = DateTime.Today.AddDays(2)
+        };
+        var createResponse = await client.PostAsJsonAsync("/api/reservations", booking);
+        var created = await createResponse.Content.ReadFromJsonAsync<Reservation>(_jsonOptions);
+        Assert.NotNull(created);
+
+        await client.PostAsJsonAsync($"/api/reservations/{created.Id}/check-in",
+            new { guestEmail = "checkout@mjail.com" });
+
+        var checkOutResponse = await client.PostAsJsonAsync(
+            $"/api/reservations/{created.Id}/check-out",
+            new { guestEmail = "checkout@mjail.com" });
+
+        Assert.Equal(HttpStatusCode.OK, checkOutResponse.StatusCode);
+        var result = await checkOutResponse.Content.ReadFromJsonAsync<Reservation>(_jsonOptions);
+        Assert.NotNull(result);
+        Assert.True(result.CheckedOut);
+        Assert.NotNull(result.CheckedOutAt);
+
+        var roomResponse = await client.GetFromJsonAsync<JsonElement>("/api/rooms/601");
+        Assert.Equal(2, roomResponse.GetProperty("state").GetInt32()); // Dirty
+    }
+
+    [Fact]
+    public async Task CheckOut_without_check_in_returns_400()
+    {
+        var client = await GetAuthenticatedClient();
+
+        await client.PostAsJsonAsync("/api/rooms", new { number = "602", state = 0 });
+
+        var booking = new ReservationRequest
+        {
+            RoomNumber = "602",
+            GuestEmail = "notin@mjail.com",
+            Start = DateTime.Today,
+            End = DateTime.Today.AddDays(2)
+        };
+        var createResponse = await client.PostAsJsonAsync("/api/reservations", booking);
+        var created = await createResponse.Content.ReadFromJsonAsync<Reservation>(_jsonOptions);
+        Assert.NotNull(created);
+
+        var checkOutResponse = await client.PostAsJsonAsync(
+            $"/api/reservations/{created.Id}/check-out",
+            new { guestEmail = "notin@mjail.com" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, checkOutResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task CheckOut_already_checked_out_returns_409()
+    {
+        var client = await GetAuthenticatedClient();
+
+        await client.PostAsJsonAsync("/api/rooms", new { number = "603", state = 0 });
+
+        var booking = new ReservationRequest
+        {
+            RoomNumber = "603",
+            GuestEmail = "double-out@mjail.com",
+            Start = DateTime.Today,
+            End = DateTime.Today.AddDays(2)
+        };
+        var createResponse = await client.PostAsJsonAsync("/api/reservations", booking);
+        var created = await createResponse.Content.ReadFromJsonAsync<Reservation>(_jsonOptions);
+        Assert.NotNull(created);
+
+        await client.PostAsJsonAsync($"/api/reservations/{created.Id}/check-in",
+            new { guestEmail = "double-out@mjail.com" });
+        await client.PostAsJsonAsync($"/api/reservations/{created!.Id}/check-out",
+            new { guestEmail = "double-out@mjail.com" });
+
+        var secondCheckOut = await client.PostAsJsonAsync(
+            $"/api/reservations/{created.Id}/check-out",
+            new { guestEmail = "double-out@mjail.com" });
+
+        Assert.Equal(HttpStatusCode.Conflict, secondCheckOut.StatusCode);
+    }
+
     #endregion
 
     #region Import
@@ -283,6 +427,53 @@ public class StaffEndpointTests : IClassFixture<TestWebApplicationFactory>
 
         var errors = result.GetProperty("errors");
         Assert.Equal(2, errors.GetArrayLength());
+    }
+
+    #endregion
+
+    #region Room Status
+
+    [Fact]
+    public async Task Patch_room_state_to_ready_returns_200()
+    {
+        var client = await GetAuthenticatedClient();
+
+        await client.PostAsJsonAsync("/api/rooms", new { number = "701", state = 0 });
+
+        var request = new HttpRequestMessage(HttpMethod.Patch, "/api/rooms/701")
+        {
+            Content = JsonContent.Create(new { state = 2 }) // Dirty
+        };
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var room = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(2, room.GetProperty("state").GetInt32());
+
+        // Now mark as ready
+        var request2 = new HttpRequestMessage(HttpMethod.Patch, "/api/rooms/701")
+        {
+            Content = JsonContent.Create(new { state = 0 })
+        };
+        var response2 = await client.SendAsync(request2);
+
+        Assert.Equal(HttpStatusCode.OK, response2.StatusCode);
+        var room2 = await response2.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(0, room2.GetProperty("state").GetInt32());
+    }
+
+    [Fact]
+    public async Task Patch_nonexistent_room_returns_404()
+    {
+        var client = await GetAuthenticatedClient();
+
+        var request = new HttpRequestMessage(HttpMethod.Patch, "/api/rooms/999")
+        {
+            Content = JsonContent.Create(new { state = 0 })
+        };
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     #endregion

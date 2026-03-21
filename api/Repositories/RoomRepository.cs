@@ -110,6 +110,19 @@ namespace Repositories
             return count > 0;
         }
 
+        public async Task<Room> UpdateRoomState(string roomNumber, State state)
+        {
+            var room = await GetRoom(roomNumber);
+
+            await _db.ExecuteAsync(
+                "UPDATE Rooms SET State = @State WHERE Number = @roomNumber",
+                new { State = (int)state, roomNumber }
+            );
+
+            room.State = state;
+            return room;
+        }
+
         public async Task<bool> DeleteRoom(string roomNumber)
         {
             Room.ValidateRoomNumber(roomNumber);

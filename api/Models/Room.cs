@@ -8,7 +8,7 @@ namespace Models
     /// </summary>
     public class Room
     {
-        private static readonly Regex RoomNumberPattern = new(@"^[1-9]\d{2}$");
+        private static readonly Regex RoomNumberPattern = new(@"^[0-9]\d{2}$"); // allow ground floor 0
 
         /// <summary>
         /// PKID For Rooms. Format is "###" where first digit is floor (1-9)

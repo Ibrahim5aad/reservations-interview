@@ -20,6 +20,7 @@ const StaffReservationSchema = z.object({
   end: z.string(),
   checkedIn: z.boolean(),
   checkedOut: z.boolean(),
+  checkedOutAt: z.string().nullable(),
 });
 
 export type StaffReservation = z.infer<typeof StaffReservationSchema>;
@@ -71,6 +72,15 @@ export async function importRooms(token: string, file: File): Promise<ImportResu
     .then(ImportResultSchema.parseAsync);
 }
 
+export async function updateRoomState(token: string, roomNumber: string, state: number) {
+  return api
+    .patch(`/api/rooms/${roomNumber}`, {
+      json: { state },
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    .json();
+}
+
 export async function deleteRoom(token: string, roomNumber: string) {
   return api
     .delete(`/api/rooms/${roomNumber}`, {
@@ -105,6 +115,15 @@ export function useGetStaffReservations(token: string | null, filters: Reservati
 export async function checkInReservation(token: string, reservationId: string, guestEmail: string) {
   return api
     .post(`/api/reservations/${reservationId}/check-in`, {
+      json: { guestEmail },
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    .json();
+}
+
+export async function checkOutReservation(token: string, reservationId: string, guestEmail: string) {
+  return api
+    .post(`/api/reservations/${reservationId}/check-out`, {
       json: { guestEmail },
       headers: { Authorization: `Bearer ${token}` },
     })
